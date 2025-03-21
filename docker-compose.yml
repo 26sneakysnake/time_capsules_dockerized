@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./frontend/src:/app/src
+    networks:
+      - frontend-network
+
+  private-service:
+    build:
+      context: ./private-service
+    ports:
+      - "3000:3000"
+    networks:
+      - frontend-network
+      - private-network
+    depends_on:
+      - private-db
+    environment:
+      - DATABASE_URL=postgres://user:password@private-db:5432/private_capsules
+
+  private-db:
+    image: postgres:14-alpine
+    volumes:
+      - private-db-data:/var/lib/postgresql/data
+      - ./private-service/db/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - private-network
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=private_capsules
+
+  public-service:
+    build:
+      context: ./public-service
+    ports:
+      - "3001:3001"
+    networks:
+      - frontend-network
+      - public-network
+    depends_on:
+      - public-db
+    environment:
+      - MONGODB_URI=mongodb://public-db:27017/public_capsules
+
+  public-db:
+    image: mongo:4.4
+    volumes:
+      - public-db-data:/data/db
+    networks:
+      - public-network
+
+networks:
+  frontend-network:
+    driver: bridge
+  private-network:
+    driver: bridge
+  public-network:
+    driver: bridge
+
+volumes:
+  private-db-data:
+    name: timecapsule-private-db-vol
+  public-db-data:
+    name: timecapsule-public-db-vol

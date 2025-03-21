@@ -1,0 +1,62 @@
+stages:
+  - security
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+
+kics-scan:
+  stage: security
+  image: checkmarx/kics:latest
+  script:
+    - kics scan -p . -o results.json --report-formats json
+    - |
+      if grep -q "HIGH" results.json; then
+        echo "HIGH severity vulnerabilities found!"
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - results.json
+
+frontend-build:
+  stage: build
+  image: docker:24.0-dind
+  services:
+    - docker:24.0-dind
+  script:
+    - docker build -t $CI_REGISTRY_USER/timecapsule-frontend:$CI_COMMIT_SHORT_SHA ./frontend
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin
+    - docker push $CI_REGISTRY_USER/timecapsule-frontend:$CI_COMMIT_SHORT_SHA
+
+private-service-build:
+  stage: build
+  image: docker:24.0-dind
+  services:
+    - docker:24.0-dind
+  script:
+    - docker build -t $CI_REGISTRY_USER/timecapsule-private:$CI_COMMIT_SHORT_SHA ./private-service
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin
+    - docker push $CI_REGISTRY_USER/timecapsule-private:$CI_COMMIT_SHORT_SHA
+
+public-service-build:
+  stage: build
+  image: docker:24.0-dind
+  services:
+    - docker:24.0-dind
+  script:
+    - docker build -t $CI_REGISTRY_USER/timecapsule-public:$CI_COMMIT_SHORT_SHA ./public-service
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin
+    - docker push $CI_REGISTRY_USER/timecapsule-public:$CI_COMMIT_SHORT_SHA
+
+deploy:
+  stage: deploy
+  image: alpine
+  script:
+    - echo "Images successfully deployed to Docker Hub"
+    - echo "Frontend: $CI_REGISTRY_USER/timecapsule-frontend:$CI_COMMIT_SHORT_SHA"
+    - echo "Private Service: $CI_REGISTRY_USER/timecapsule-private:$CI_COMMIT_SHORT_SHA"
+    - echo "Public Service: $CI_REGISTRY_USER/timecapsule-public:$CI_COMMIT_SHORT_SHA"
