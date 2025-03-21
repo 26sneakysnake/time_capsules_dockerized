@@ -1,12 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const Redis = require('ioredis');
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Redis client
+const redis = new Redis(process.env.REDIS_URL || 'redis://redis:6379');
 
 // DB Connection
 const pool = new Pool({
@@ -27,7 +31,23 @@ app.post('/api/private-capsules', async (req, res) => {
       [content, unlockDate]
     );
     
-    res.status(201).json(result.rows[0]);
+    // Transformer le résultat pour le format attendu par le frontend
+    const capsule = {
+      id: result.rows[0].id,
+      content: result.rows[0].content,
+      unlockDate: result.rows[0].unlock_date,
+      createdAt: result.rows[0].created_at
+    };
+    
+    // Publier l'événement de création de capsule dans Redis
+    redis.publish('capsule-notifications', JSON.stringify({
+      id: capsule.id,
+      type: 'private',
+      action: 'created',
+      date: new Date().toISOString()
+    }));
+    
+    res.status(201).json(capsule);
   } catch (error) {
     console.error('Error creating private capsule:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -49,7 +69,16 @@ app.get('/api/private-capsules', async (req, res) => {
     }
     
     const result = await pool.query(query, [now]);
-    res.json(result.rows);
+    
+    // Transformer les données pour correspondre au format attendu par le frontend
+    const formattedResults = result.rows.map(capsule => ({
+      id: capsule.id,
+      content: capsule.content,
+      unlockDate: capsule.unlock_date,
+      createdAt: capsule.created_at
+    }));
+    
+    res.json(formattedResults);
   } catch (error) {
     console.error('Error fetching private capsules:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -66,6 +95,6 @@ app.listen(port, () => {
 });
 
 app.use(cors({
-  origin: 'http://localhost:8080', // Autorise le frontend
+  origin: '*', // Modifié pour fonctionner avec le reverse proxy
   credentials: true
 }));

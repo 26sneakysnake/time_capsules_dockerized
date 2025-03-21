@@ -1,17 +1,32 @@
-# Utiliser une image Node.js légère comme base
-FROM node:18-alpine
+# Stage de build
+FROM node:18-alpine AS builder
 
-# Définir le répertoire de travail
 WORKDIR /app
 
-# Copier les fichiers de dépendances
 COPY package*.json ./
+RUN npm install --production
 
-# Installer les dépendances
-RUN npm install
+# Stage final
+FROM node:18-alpine
 
-# Exposer le port
+# Créer un utilisateur non-root
+RUN addgroup -S nodeapp && adduser -S nodeapp -G nodeapp
+
+WORKDIR /app
+
+# Copier les dépendances du stage précédent
+COPY --from=builder /app/node_modules ./node_modules
+COPY . .
+
+# Définir les permissions correctes
+RUN chown -R nodeapp:nodeapp /app
+
+# Utiliser l'utilisateur non-root
+USER nodeapp
+
 EXPOSE 8080
 
-# Commande pour démarrer l'application avec hot reload
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1
+
 CMD ["npm", "start"]

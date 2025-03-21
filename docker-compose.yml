@@ -1,28 +1,44 @@
 version: '3.8'
 
 services:
+  nginx:
+    build:
+      context: ./nginx
+    ports:
+      - "80:80"
+    networks:
+      - frontend-network
+    depends_on:
+      - frontend
+      - private-service
+      - public-service
+      - notification-service
+
   frontend:
     build:
       context: ./frontend
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./frontend/src:/app/src
     networks:
       - frontend-network
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      - private-service
+      - public-service
 
   private-service:
     build:
       context: ./private-service
-    ports:
-      - "3000:3000"
     networks:
       - frontend-network
       - private-network
+      - queue-network
     depends_on:
       - private-db
+      - redis
     environment:
       - DATABASE_URL=postgres://user:password@private-db:5432/private_capsules
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
 
   private-db:
     image: postgres:14-alpine
@@ -39,15 +55,17 @@ services:
   public-service:
     build:
       context: ./public-service
-    ports:
-      - "3001:3001"
     networks:
       - frontend-network
       - public-network
+      - queue-network
     depends_on:
       - public-db
+      - redis
     environment:
       - MONGODB_URI=mongodb://public-db:27017/public_capsules
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
 
   public-db:
     image: mongo:4.4
@@ -56,6 +74,24 @@ services:
     networks:
       - public-network
 
+  notification-service:
+    build:
+      context: ./notification-service
+    networks:
+      - queue-network
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+
+  redis:
+    image: redis:alpine
+    volumes:
+      - redis-data:/data
+    networks:
+      - queue-network
+
 networks:
   frontend-network:
     driver: bridge
@@ -63,9 +99,13 @@ networks:
     driver: bridge
   public-network:
     driver: bridge
+  queue-network:
+    driver: bridge
 
 volumes:
   private-db-data:
     name: timecapsule-private-db-vol
   public-db-data:
     name: timecapsule-public-db-vol
+  redis-data:
+    name: timecapsule-redis-vol

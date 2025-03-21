@@ -1,7 +1,7 @@
-// Points d'entrée des API
+// Points d'entrée des API via le reverse proxy
 const API_URL = {
-    private: 'http://localhost:3000/api/private-capsules',
-    public: 'http://localhost:3001/api/public-capsules'
+    private: '/api/private-capsules',
+    public: '/api/public-capsules'
 };
 
 // Créer une nouvelle capsule temporelle
